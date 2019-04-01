@@ -1,7 +1,7 @@
 # SML-575
 ## Evaluating Information Retrieval Models using BERT features and OpenBookQA 
 
-Dataset is present in : /scratch/pbanerj6/sml-datasets/ranking 
+Dataset is present in : /scratch/pbanerj6/sml-dataset/ranking 
  
 1. train.tsv 
 2. val.tsv : Use this for model selection
