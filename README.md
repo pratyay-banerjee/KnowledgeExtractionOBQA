@@ -11,7 +11,18 @@ Embedding files contain tokens and their corresponding embeddings of size 768.
 
 Tasks:
 1. Evaluate classifiers using only [CLS] tokens.
-2. Evaluate using all tokens.
+2. Evaluate using all token embeddings.
+3. Evaluate using Text tokens.
+4. Create following table:
+
+| Classifier | Text Tokens | CLS Emb | All Tokens|
+|------------|-------------|---------|-----------|
+| LinearSVC  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
+| SVM Poly  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
+| SVM RBF  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
+
+5. Plot training-test error curves for : 100,1000,10000,20000,50000 training samples and all test samples.
+
 
 
 
