@@ -21,7 +21,7 @@ Tasks:
 | SVM Poly  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
 | SVM RBF  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
 
-5. Plot training-test error curves for : 100,1000,10000,20000,50000 training samples and all test samples.
+5. Plot learning curves for : 100,1000,10000,20000,50000 training samples and all test samples, test accuracy and mrr.
 
 
 
