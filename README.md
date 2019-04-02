@@ -14,3 +14,21 @@ Tasks:
 2. Evaluate using all tokens.
 
 
+
+Tips to work on Jupyter in Agave:
+
+1. Start an interactive session : interactive -n 20 
+2. Note the host you start your session : "cg6-17"
+3. source activate your_conda_env
+4. pip install jupyterlab
+5. To start jupyter : jupyter lab --port=8889 --no-browser --ip=0.0.0.0 
+Note the port 8889
+6. You can run jupyter in nohup like : nohup jupyter lab --port=8889 --no-browser --ip=0.0.0.0 > jupyter.log &
+7. Note the token generated in jupyter.log 
+8. In another terminal/cmd prompt ssh to agave using port forwarding : ssh -L8889:localhost:8889 yourname@agave.asu.edu
+9. In this new terminal/cmd prompt ssh to "cg6-17" using port forwarding : ssh -L8889:localhost:8889 yourname@cg6-17
+10. In your browser open : localhost:8889. If a token is asked enter the token from jupyter.log
+
+
+
+
