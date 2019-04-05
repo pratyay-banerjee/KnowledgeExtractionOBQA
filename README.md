@@ -1,6 +1,12 @@
 # SML-575
 ## Evaluating Information Retrieval Models using BERT features and OpenBookQA 
 
+
+# [NEW]
+1. Added Precision@1 and Precision@3 metric code in Xgboost-All / Xgboost-Tokens. Kindly replicate those also with MRR for Test.
+2. SVM trainSampleSize change accordingly. TrainingData maxSize : 75000.
+
+
 Dataset is present in : /scratch/pbanerj6/sml-dataset/ranking 
  
 1. train.tsv 
