@@ -29,6 +29,8 @@ Tasks:
 | LinearSVC  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
 | SVM Poly  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
 | SVM RBF  | Val: Test: MRR:| Val: Test: MRR: | Val: Test: MRR:|
+| DecisionTree  | Val:56.18% Test:55.73% MRR,PR@1,PR@3:(0.435964502164501, 0.15, 0.5393333333333333)| Val:57.66% Test:56.80% MRR,PR@1,PR@3:(0.45552587782587617, 0.16666666666666666, 0.5866666666666667) | Val:55.84% Test:55.68% MRR,PR@1,PR@3:(0.4611036075036066, 0.18333333333333332, 0.5826666666666667)|
+
 
 5. Plot learning curves for : 100,1000,10000,20000,50000 training samples and all test samples, test accuracy and mrr.
 6. Save your best models.
