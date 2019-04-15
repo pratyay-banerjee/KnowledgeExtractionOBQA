@@ -1,6 +1,9 @@
 # SML-575
 ## Evaluating Information Retrieval Models using BERT features and OpenBookQA 
 
+# [NEW2]
+1. Find the PCA reduced data for "all" data. Those who are having trouble running use this data to run your "all" model. Dimension of data (75000 x 6000) instead of (75000 x 23000). Data retaintion is 90%
+2. Find the pipeline of using PCA reduced code from svm/SVM-PCA-All-Linear.ipynb
 
 # [NEW]
 1. Added Precision@1 and Precision@3 metric code in Xgboost-All / Xgboost-Tokens. Kindly replicate those also with MRR for Test.
