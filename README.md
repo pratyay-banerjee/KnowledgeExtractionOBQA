@@ -2,7 +2,8 @@
 ## Evaluating Information Retrieval Models using BERT features and OpenBookQA 
 
 # [NEW2]
-1. Find the PCA reduced data for "all" data. Those who are having trouble running use this data to run your "all" model. Dimension of data (75000 x 6000) instead of (75000 x 23000). Data retaintion is 90%
+1. Find the PCA reduced data for "all" data. Those who are having trouble running use this data to run your "all" model. Dimension of data (75000 x 6000) instead of (75000 x 23000). Data retaintion is 90%.
+Location : /scratch/kkpal/sml-dataset/
 2. Find the pipeline of using PCA reduced code from svm/SVM-PCA-All-Linear.ipynb
 
 # [NEW]
