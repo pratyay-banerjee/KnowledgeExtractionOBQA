@@ -182,13 +182,15 @@ class DataProcessor(object):
         raise NotImplementedError()
 
     @classmethod
-    def _read_tsv(cls, input_file, quotechar=None):
+    def _read_tsv(cls, input_file, quotechar=None, limit=None):
         """Reads a tab separated value file."""
         with open(input_file, "r", encoding='utf-8') as f:
             reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
             lines = []
             for line in reader:
                 lines.append(line)
+                if limit is not None and limit > len(lines):
+                    break
             return lines
 
 class BoWProcessor(DataProcessor):
@@ -706,7 +708,7 @@ def main():
 #     model = BertForSequenceClassification2.from_pretrained(args.bert_model,
 #               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
 #               num_labels = num_labels)
-    model = BertForCNN.from_pretrained(args.bert_model,
+    model = BertForSequenceClassification2.from_pretrained(args.bert_model,
               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
               num_labels = num_labels)
 #     BertForCNN
