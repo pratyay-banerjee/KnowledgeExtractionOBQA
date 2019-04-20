@@ -29,6 +29,7 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import Conv1d, Linear
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn import functional as F
@@ -65,6 +66,95 @@ class BertForSequenceClassification2(BertPreTrainedModel):
         logits = self.classifier2(logits)
 #         logits = self.classifier(pooled_output)
 
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
+        
+class BertForCNN4(BertPreTrainedModel):
+    def __init__(self, config, num_labels):
+        super(BertForCNN4, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self._num_filters = 500
+        self._embedding_dim = 1024
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.apply(self.init_bert_weights)
+        self._ngram_filter_sizes = (2,3,4,5)
+        self._activation = torch.nn.ReLU()
+        self._convolution_layers = [Conv1d(in_channels=self._embedding_dim,
+                                           out_channels=self._num_filters,
+                                           kernel_size=ngram_size)
+                                    for ngram_size in self._ngram_filter_sizes]
+        for i, conv_layer in enumerate(self._convolution_layers):
+            self.add_module('conv_layer_%d' % i, conv_layer)
+
+        maxpool_output_dim = self._num_filters * len(self._ngram_filter_sizes)
+        self.projection_layer = nn.Linear(maxpool_output_dim+1024, num_labels)
+#         self.classifier2 = nn.Linear(1024*4, num_labels)
+
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        encodings, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        pooled_output = self.dropout(pooled_output)
+        encodings = encodings*attention_mask.unsqueeze(-1).half()
+        cls_features = pooled_output    
+        linear_output = encodings.permute(0,2,1) # Reshaping fot max_pool
+        
+        filter_outputs = [cls_features]
+        for i in range(len(self._convolution_layers)):
+            convolution_layer = getattr(self, 'conv_layer_{}'.format(i))
+            filter_outputs.append(
+                    self._activation(convolution_layer(linear_output)).max(dim=2)[0]
+            )
+
+        # Now we have a list of `num_conv_layers` tensors of shape `(batch_size, num_filters)`.
+        # Concatenating them gives us a tensor of shape `(batch_size, num_filters * num_conv_layers)`.
+        maxpool_output = torch.cat(filter_outputs, dim=1) if len(filter_outputs) > 1 else filter_outputs[0]
+        logits = self.projection_layer(maxpool_output)        
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
+        
+class BertForCNN3(BertPreTrainedModel):
+    def __init__(self, config, num_labels):
+        super(BertForCNN3, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+#         self.classifier1 = nn.Linear(config.hidden_size, 100)
+#         self.relu = torch.nn.ReLU()
+#         self.classifier2 = nn.Linear(868, num_labels)
+        self.classifier2 = nn.Linear(1024*4, num_labels)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        encodings, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+#         print(encodings.size(),attention_mask.size())
+        encodings = encodings*attention_mask.unsqueeze(-1).half()
+        
+        pooled_output = self.dropout(pooled_output)
+        cls_features = pooled_output
+#         cls_features = self.classifier1(pooled_output)        
+#         cls_features = self.dropout(cls_features)
+        linear_output = encodings.permute(0,2,1) # Reshaping fot max_pool
+        max_out_features = F.max_pool1d(linear_output, linear_output.shape[2]).squeeze(2)
+        min_out_features = (-1)*F.max_pool1d((-1)*linear_output, linear_output.shape[2]).squeeze(2)
+        avg_out_features = F.avg_pool1d(linear_output, linear_output.shape[2]).squeeze(2)
+        # max_out_features.shape = (batch_size, hidden_size_linear)
+        max_out_features = self.dropout(max_out_features)
+        min_out_features = self.dropout(min_out_features)
+        avg_out_features = self.dropout(avg_out_features)
+
+        all_features = torch.cat([cls_features,max_out_features,avg_out_features,min_out_features],1)
+#         logits = self.relu(all_features)
+        logits = self.classifier2(all_features)
+        
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -112,7 +202,8 @@ class BertForCNN(BertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier1 = nn.Linear(config.hidden_size, 100)
         self.relu = torch.nn.ReLU()
-        self.classifier2 = nn.Linear(868, num_labels)
+#         self.classifier2 = nn.Linear(868, num_labels)
+        self.classifier2 = nn.Linear(1124, num_labels)
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
@@ -189,7 +280,7 @@ class DataProcessor(object):
             lines = []
             for line in reader:
                 lines.append(line)
-                if limit is not None and limit > len(lines):
+                if limit is not None and len(lines) > limit:
                     break
             return lines
 
@@ -232,11 +323,11 @@ class BoWProcessor(DataProcessor):
 class OBQAProcessor(DataProcessor):
     """Processor for the MRPC data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir,limit=None):
         """See base class."""
         logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, "train.tsv"),limit=limit), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
@@ -630,6 +721,10 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
+    parser.add_argument('--train_limit',
+                        type=int,
+                        default=10000000,
+                        help="Train Samples Limit")
 
     args = parser.parse_args()
 
@@ -698,17 +793,24 @@ def main():
     train_examples = None
     num_train_steps = None
     if args.do_train:
-        train_examples = processor.get_train_examples(args.data_dir)
+        train_examples = processor.get_train_examples(args.data_dir,args.train_limit)
         num_train_steps = int(
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
         test_examples = processor.get_test_examples(args.data_dir)
         dev_examples = processor.get_dev_examples(args.data_dir)
 
     # Prepare model
-#     model = BertForSequenceClassification2.from_pretrained(args.bert_model,
+    BertForCNN3
+#     model = BertForSequenceClassification.from_pretrained(args.bert_model,
 #               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
 #               num_labels = num_labels)
-    model = BertForSequenceClassification2.from_pretrained(args.bert_model,
+#     model = BertForCNN.from_pretrained(args.bert_model,
+#               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
+#               num_labels = num_labels)
+#     model = BertForCNN3.from_pretrained(args.bert_model,
+#               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
+#               num_labels = num_labels)
+    model = BertForCNN4.from_pretrained(args.bert_model,
               cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
               num_labels = num_labels)
 #     BertForCNN
@@ -814,7 +916,7 @@ def main():
                 
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
+                    lr_this_step = args.learning_rate * warmup_linear(global_step/(t_total), args.warmup_proportion)
                     for param_group in optimizer.param_groups:
                         param_group['lr'] = lr_this_step
                     optimizer.step()
