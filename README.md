@@ -1,4 +1,4 @@
-# SML-575
+# KnowledgeExtractionOBQA
 ## Evaluating Information Retrieval Models using BERT features and OpenBookQA 
 
 # [NEW2]
