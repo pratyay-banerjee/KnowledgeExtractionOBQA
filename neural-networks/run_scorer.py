@@ -28,12 +28,14 @@ from tqdm import tqdm, trange
 
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
+from torch.nn import functional as F
 
 from torch.nn import CrossEntropyLoss
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.modeling import BertForSequenceClassification
+from pytorch_pretrained_bert.modeling import BertForSequenceClassification,BertPreTrainedModel,BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
@@ -42,6 +44,97 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+class BertForSequenceClassification2(BertPreTrainedModel):
+    def __init__(self, config, num_labels):
+        super(BertForSequenceClassification2, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier1 = nn.Linear(config.hidden_size, 100)
+        self.relu = torch.nn.ReLU()
+        self.classifier2 = nn.Linear(100, num_labels)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier1(pooled_output)
+        logits = self.dropout(logits)
+        logits = self.relu(logits)
+        logits = self.classifier2(logits)
+#         logits = self.classifier(pooled_output)
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
+        
+class BertForCNN2(BertPreTrainedModel):
+    def __init__(self, config, num_labels):
+        super(BertForCNN2, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier1 = nn.Linear(config.hidden_size, 100)
+        self.relu = torch.nn.ReLU()
+        self.classifier2 = nn.Linear(868, num_labels)
+#         self.classifier2 = nn.Linear(1124, num_labels)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        encodings, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        pooled_output = self.dropout(pooled_output)
+        cls_features = self.classifier1(pooled_output)        
+        cls_features = self.dropout(cls_features)
+        linear_output = encodings.permute(0,2,1) # Reshaping fot max_pool
+        max_out_features = F.max_pool1d(linear_output, linear_output.shape[2]).squeeze(2)
+        # max_out_features.shape = (batch_size, hidden_size_linear)
+        max_out_features = self.dropout(max_out_features)
+        all_features = torch.cat([cls_features,max_out_features],1)
+        logits = self.relu(all_features)
+        logits = self.classifier2(logits)
+        
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
+        
+class BertForCNN(BertPreTrainedModel):
+    def __init__(self, config, num_labels):
+        super(BertForCNN, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier1 = nn.Linear(config.hidden_size, 100)
+        self.relu = torch.nn.ReLU()
+#         self.classifier2 = nn.Linear(868, num_labels)
+        self.classifier2 = nn.Linear(1124, num_labels)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        encodings, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        pooled_output = self.dropout(pooled_output)
+        cls_features = self.classifier1(pooled_output)        
+        cls_features = self.dropout(cls_features)
+        linear_output = encodings.permute(0,2,1) # Reshaping fot max_pool
+        max_out_features = F.max_pool1d(linear_output, linear_output.shape[2]).squeeze(2)
+        # max_out_features.shape = (batch_size, hidden_size_linear)
+        max_out_features = self.dropout(max_out_features)
+        all_features = torch.cat([cls_features,max_out_features],1)
+        logits = self.relu(all_features)
+        logits = self.classifier2(logits)
+        
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
@@ -119,6 +212,48 @@ class BoWProcessor(DataProcessor):
             guid = line[0]
             text_a = line[1] + " . " + line[2]
             text_b = line[-1]
+            label = 0
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+    
+class OBQAProcessor(DataProcessor):
+    """Processor for the MRPC data set (GLUE version)."""
+    
+    def get_score_examples(self, data_dir,fname):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, fname)), "score")
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "val.tsv")), "dev")
+    
+    def get_test_examples(self,data_dir):
+        """See base class."""                                                   
+        return self._create_examples(                                           
+            self._read_tsv(os.path.join(data_dir, "test.tsv")),                  
+            "test")                                                   
+                           
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = line[0]
+            text_a = line[1]
+            text_b = line[2]
             label = 0
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
@@ -263,7 +398,7 @@ def get_dataloader(train_features,train_batch_size):
     all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
     all_unique_ids = torch.tensor([f.uuid for f in train_features], dtype=torch.long)
     train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,all_unique_ids)
-    train_sampler = RandomSampler(train_data)
+    train_sampler = SequentialSampler(train_data)
     train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=train_batch_size)
     return train_dataloader
 
@@ -319,15 +454,22 @@ def main():
                         type=int,
                         default=42,
                         help="random seed for initialization")
+    
+    parser.add_argument('--modeltype',
+                        type=str,
+                        default="seqclass",
+                        help="Model for scoring")
 
     args = parser.parse_args()
 
     processors = {
-        "bow" : BoWProcessor
-    }
+        "bow" : BoWProcessor,
+        "obqa" : OBQAProcessor
+    } 
 
     num_labels_task = {
-        "bow" : 2
+        "bow" : 2,
+        "obqa" :2
     }
 
     
@@ -356,7 +498,16 @@ def main():
     # Prepare model
     output_model_file = os.path.join(args.output_dir,"best_model.bin")
     model_state_dict = torch.load(output_model_file)
-    model = BertForSequenceClassification.from_pretrained(args.bert_model, state_dict=model_state_dict, num_labels=num_labels)
+    if args.modeltype == "seqclass":
+        model = BertForSequenceClassification2.from_pretrained(args.bert_model, state_dict=model_state_dict, num_labels=num_labels)
+    elif args.modeltype == "cnn":
+        model = BertForCNN.from_pretrained(args.bert_model, state_dict=model_state_dict, num_labels=num_labels)
+    elif args.modeltype == "simple":
+        model = BertForSequenceClassification.from_pretrained(args.bert_model, state_dict=model_state_dict, num_labels=num_labels)
+    elif args.modeltype == "cnn2":
+        model = BertForCNN2.from_pretrained(args.bert_model, state_dict=model_state_dict, num_labels=num_labels)
+        
+        
     model.to(device)
     model = torch.nn.DataParallel(model)
 
@@ -391,10 +542,9 @@ def main():
             score = scores[1]                                    
             all_results[idx] = score
     
-    outfd = open(args.data_dir+args.fname+"-score.tsv","w+")
-    for key,val in tqdm(all_results.items(),desc="Writing ScoreFile:"):
-        outfd.write("%s\t%s\n"%(key,val))
-    outfd.close()
+    with open(args.output_dir+"/"+args.fname+"-score.tsv","w+") as outfd:
+        for key,val in tqdm(all_results.items(),desc="Writing ScoreFile:"):
+            outfd.write("%s\t%s\n"%(key,val))
     
 if __name__ == "__main__":
     main()
